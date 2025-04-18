@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Memory Management Visualization</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.0/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.0/ScrollTrigger.min.js"></script>
+    
+   
+</head>
+<body class="light-mode">
+    <div class="page-transition">
+        <div class="transition-content">
+            <i class="fas fa-microchip"></i>
+            <h2>Loading Simulator</h2>
+        </div>
+        <div class="circuit-lines"></div>
+    </div>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fas fa-microchip"></i>
+                <span>MemoryViz</span>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <h3><i class="fas fa-sliders-h"></i> Configuration</h3>
+                    <div class="control-item">
+                        <label for="pageSize">Page Size (KB)</label>
+                        <input type="range" id="pageSize" min="1" max="64" value="4">
+                        <span id="pageSizeValue">4 KB</span>
+                    </div>
+                    <div class="control-item">
+                        <label for="totalMemory">Total Memory (MB)</label>
+                        <input type="range" id="totalMemory" min="1" max="1024" value="256">
+                        <span id="totalMemoryValue">256 MB</span>
+                    </div>
+                    <div class="control-item">
+                        <label for="processCount">Process Count</label>
+                        <input type="range" id="processCount" min="1" max="10" value="4">
+                        <span id="processCountValue">4</span>
+                    </div>
+                    <div class="control-item">
+                        <label for="memoryThreshold">Auto-Stop Threshold (%)</label>
+                        <input type="range" id="memoryThreshold" min="50" max="100" value="90">
+                        <span id="memoryThresholdValue">90%</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3><i class="fas fa-cog"></i> Algorithm</h3>
+                    <select id="algorithm" class="algorithm-select">
+                        <option value="lru">LRU</option>
+                        <option value="fifo">FIFO</option>
+                        <option value="optimal">Optimal</option>
+                        <option value="hybrid">Hybrid LRU-LFU</option>
+                        <option value="adaptive">Adaptive Learning</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <h3><i class="fas fa-play"></i> Simulation</h3>
+                    <div class="button-group">
+                        <button id="startSimulation" class="btn primary">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button id="pauseSimulation" class="btn secondary" disabled>
+                            <i class="fas fa-pause"></i> Pause
+                        </button>
+                        <button id="resetSimulation" class="btn secondary" disabled>
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="metrics">
+                <h3><i class="fas fa-chart-line"></i> Metrics</h3>
+                <div class="metric-item" id="pageFaults">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Page Faults: 0</span>
+                </div>
+                <div class="metric-item" id="hitRatio">
+                    <i class="fas fa-bullseye"></i>
+                    <span>Hit Ratio: 0%</span>
+                </div>
+                <div class="metric-item" id="fragmentation">
+                    <i class="fas fa-puzzle-piece"></i>
+                    <span>Fragmentation: 0%</span>
+                </div>
+                <div class="metric-item" id="throughput">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Throughput: 0 ops/s</span>
+                </div>
+            </div>
+        </nav>
+
+        <main class="content">
+            <div class="visualization-container">
+                <div class="visualization-header">
+                    <div class="header-left">
+                       
+<button id="backToLanding" class="btn secondary" onclick="window.location.href='landing.html'">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                        <h2><i class="fas fa-memory"></i> Memory Visualization</h2>
+                    </div>
+                    <div class="view-controls">
+                        <button id="toggleView" class="btn secondary">
+                            <i class="fas fa-th"></i> Toggle View
+                        </button>
+                        <button id="toggleAnimation" class="btn secondary">
+                            <i class="fas fa-film"></i> Toggle Animation
+                        </button>
+                    </div>
+                </div>
+                <div class="memory-blocks">
+                    <div class="memory-grid" id="memoryGrid"></div>
+                </div>
+
+                <div class="fragmentation-container">
+                    <h3><i class="fas fa-puzzle-piece"></i> Memory Fragmentation</h3>
+                    <div class="fragmentation-legend">
+                        <div class="legend-item">
+                            <span class="legend-color internal"></span>
+                            <span>Internal Fragmentation</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color external"></span>
+                            <span>External Fragmentation</span>
+                        </div>
+                    </div>
+                    <div id="fragmentation-view"></div>
+                    <div id="fragmentation-chart"></div>
+                </div>
+
+                <div id="animation-container">
+                    
+                </div>
+
+                <div class="process-panel">
+                    <h3><i class="fas fa-tasks"></i> Active Processes</h3>
+                    <div id="processQueue"></div>
+                </div>
+
+                <div class="insights-panel">
+                    <div class="chart-container">
+                        <h3><i class="fas fa-chart-line"></i> Performance Metrics</h3>
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3><i class="fas fa-chart-pie"></i> Memory Access Patterns</h3>
+                        <canvas id="patternsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- SVG Patterns for Fragmentation -->
+    <svg width="0" height="0">
+        <defs>
+            <pattern id="diagonal-stripe-internal" patternUnits="userSpaceOnUse" width="10" height="10">
+                <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4" 
+                      style="stroke:#ff6b6b; stroke-width:2; stroke-linecap:square"/>
+            </pattern>
+            <pattern id="diagonal-stripe-external" patternUnits="userSpaceOnUse" width="10" height="10">
+                <path d="M-2,2 l4,-4 M0,10 l10,-10 M8,12 l4,-4" 
+                      style="stroke:#4dabf7; stroke-width:2; stroke-linecap:square"/>
+            </pattern>
+        </defs>
+    </svg>
+
+    <script src="js/memoryManager.js"></script>
+    <script src="js/visualization.js"></script>a
+    <script src="js/main.js"></script>
+</body>
+</html>
