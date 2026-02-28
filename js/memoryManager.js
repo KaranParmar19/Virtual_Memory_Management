@@ -32,6 +32,27 @@ class MemoryManager {
         this.lastUsed = new Map();
         this.currentExecutingProcess = null; // Track current executing process
         this.fragmentationStats = { internal: 0, external: 0 };
+
+        // --- Expert OS Additions ---
+        // Translation Lookaside Buffer (Hardware Cache for Page Tables)
+        this.tlbSize = 4; // realistic small TLB
+        this.tlb = new Map(); // key: processId_pageId, value: frameId
+        this.tlbHits = 0;
+        this.tlbMisses = 0;
+
+        // Swap Space (Disk backing store)
+        this.swapSpace = new Map(); // key: processId_pageId, value: swapLocation
+
+        // System Console Logs
+        this.systemLogs = [];
+    }
+
+    logSystemEvent(message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = `[${timestamp}] [Kernel] ${message}`;
+        this.systemLogs.push({ message: logEntry, type });
+        this.notifyListeners('systemLog', { message: logEntry, type });
+        console.log(logEntry);
     }
 
     addListener(callback) {
@@ -64,7 +85,8 @@ class MemoryManager {
             'fifo': 'FIFO',
             'optimal': 'Optimal',
             'hybrid': 'Hybrid',
-            'adaptive': 'Adaptive'
+            'adaptive': 'Adaptive',
+            'clock': 'Clock' // Added Clock Algorithm
         };
         return formatMap[algorithm.toLowerCase()] || 'FIFO';
     }
@@ -140,17 +162,41 @@ class MemoryManager {
         let hitsCount = 0;
 
         const algorithm = this.getReplacementAlgorithmName(algorithmId);
+        const currentProcess = this.processes.get(this.currentExecutingProcess);
 
         // Ensure algorithm state structures exist
         if (!this.fifoQueue) this.fifoQueue = [];
         if (!this.lruHistory) this.lruHistory = [];
         if (!this.lfuFrequency) this.lfuFrequency = new Map();
+        if (this.clockHand === undefined) this.clockHand = 0; // Clock hand points to frame index
 
-        pageAccesses.forEach((page, index) => {
+        pageAccesses.forEach((logicalPage, index) => {
             // Update Frequency for LFU/Hybrid/Adaptive
-            this.lfuFrequency.set(page, (this.lfuFrequency.get(page) || 0) + 1);
+            this.lfuFrequency.set(logicalPage, (this.lfuFrequency.get(logicalPage) || 0) + 1);
 
-            if (!resultFrames.includes(page)) {
+            // 1. TLB Lookup
+            let frameIdx = currentProcess ? this.checkTLB(currentProcess.id, logicalPage) : -1;
+            let isHit = false;
+
+            // 2. Page Table Walk (if TLB Miss)
+            if (frameIdx === -1 && currentProcess && currentProcess.pageTable[logicalPage]) {
+                const ptEntry = currentProcess.pageTable[logicalPage];
+                if (ptEntry.valid) {
+                    frameIdx = ptEntry.frameId;
+                    this.logSystemEvent(`Page Table HIT: Page ${logicalPage} -> Frame ${frameIdx}`, 'success');
+                    // Add to TLB
+                    this.updateTLB(currentProcess.id, logicalPage, frameIdx);
+                } else {
+                    this.logSystemEvent(`Page Table MISS (Fault): Page ${logicalPage} not in memory`, 'error');
+                }
+            }
+
+            // Fallback for simulation if no process context
+            if (!currentProcess) {
+                frameIdx = resultFrames.indexOf(logicalPage);
+            }
+
+            if (frameIdx === -1 || !resultFrames.includes(logicalPage)) {
                 // Page fault
                 pageFaults.push(true);
                 faultsCount++;
@@ -158,120 +204,178 @@ class MemoryManager {
                 if (resultFrames.includes(null)) {
                     // Empty frame available
                     const emptyIndex = resultFrames.indexOf(null);
-                    resultFrames[emptyIndex] = page;
+                    resultFrames[emptyIndex] = logicalPage;
+
+                    // Update Process Page Table
+                    if (currentProcess && currentProcess.pageTable[logicalPage]) {
+                        currentProcess.pageTable[logicalPage].frameId = emptyIndex;
+                        currentProcess.pageTable[logicalPage].valid = true;
+                        currentProcess.pageTable[logicalPage].inSwap = false;
+                        this.logSystemEvent(`Loaded Page ${logicalPage} from Swap to Frame ${emptyIndex}`, 'info');
+                        this.updateTLB(currentProcess.id, logicalPage, emptyIndex);
+                    }
 
                     // Track for algorithms
-                    this.fifoQueue.push(page);
-                    this.lruHistory.push(page);
+                    this.fifoQueue.push(logicalPage);
+                    this.lruHistory.push(logicalPage);
                 } else {
                     // Replace based on algorithm
                     let replaceIndex = -1;
+                    let evictedPage = null;
 
                     if (algorithm === 'FIFO') {
                         if (this.fifoQueue.length > 0) {
-                            const oldest = this.fifoQueue.shift();
-                            replaceIndex = resultFrames.indexOf(oldest);
-                            this.fifoQueue.push(page);
-                            this.lruHistory.push(page);
+                            evictedPage = this.fifoQueue.shift();
+                            replaceIndex = resultFrames.indexOf(evictedPage);
+                            this.fifoQueue.push(logicalPage);
+                            this.lruHistory.push(logicalPage);
                         }
                     } else if (algorithm === 'LRU') {
-                        // Find least recently used page in frames
-                        let lruPage = null;
                         let oldestIndex = Infinity;
-
                         resultFrames.forEach(framePage => {
                             const lastUsed = this.lruHistory.lastIndexOf(framePage);
                             if (lastUsed < oldestIndex) {
                                 oldestIndex = lastUsed;
-                                lruPage = framePage;
+                                evictedPage = framePage;
                             }
                         });
-
-                        replaceIndex = resultFrames.indexOf(lruPage);
-                        this.lruHistory.push(page);
+                        replaceIndex = resultFrames.indexOf(evictedPage);
+                        this.lruHistory.push(logicalPage);
                     } else if (algorithm === 'Optimal') {
-                        // Look ahead in pageAccesses
                         let farthest = -1;
                         for (let j = 0; j < resultFrames.length; j++) {
                             const nextOccurrence = pageAccesses.slice(index + 1).indexOf(resultFrames[j]);
                             if (nextOccurrence === -1) {
                                 replaceIndex = j;
-                                break; // Will never be used again, perfect candidate
+                                evictedPage = resultFrames[j];
+                                break;
                             }
                             if (nextOccurrence > farthest) {
                                 farthest = nextOccurrence;
                                 replaceIndex = j;
+                                evictedPage = resultFrames[j];
                             }
                         }
-                        this.lruHistory.push(page);
+                        this.lruHistory.push(logicalPage);
                     } else if (algorithm === 'Hybrid') {
-                        // Hybrid LRU-LFU: Score based on both recency and frequency
-                        let bestCandidate = null;
                         let lowestScore = Infinity;
-
                         resultFrames.forEach(framePage => {
                             const recencyRank = this.lruHistory.lastIndexOf(framePage);
                             const frequencyCount = this.lfuFrequency.get(framePage) || 0;
-
-                            // Higher recencyRank is better, higher frequencyCount is better
-                            // We want to evict the page with the LOWEST combined score
-                            // Invert recency so that older = lower score
                             const score = frequencyCount + (recencyRank > 0 ? recencyRank * 0.1 : 0);
 
                             if (score < lowestScore) {
                                 lowestScore = score;
-                                bestCandidate = framePage;
+                                evictedPage = framePage;
                             }
                         });
-
-                        replaceIndex = resultFrames.indexOf(bestCandidate);
-                        this.lruHistory.push(page);
+                        replaceIndex = resultFrames.indexOf(evictedPage);
+                        this.lruHistory.push(logicalPage);
                     } else if (algorithm === 'Adaptive') {
-                        // Adaptive Learning: dynamically switch between LRU and Optimal based on hit rates
                         const lruHits = this.algorithmStats['lru'] ? this.algorithmStats['lru'].hits : 0;
                         const optimalHits = this.algorithmStats['optimal'] ? this.algorithmStats['optimal'].hits : 0;
 
-                        // Choose behavior based on historical performance
                         if (lruHits > optimalHits) {
-                            // Fallback to LRU logic
-                            let lruPage = null;
                             let oldestIndex = Infinity;
                             resultFrames.forEach(framePage => {
                                 const lastUsed = this.lruHistory.lastIndexOf(framePage);
                                 if (lastUsed < oldestIndex) {
                                     oldestIndex = lastUsed;
-                                    lruPage = framePage;
+                                    evictedPage = framePage;
                                 }
                             });
-                            replaceIndex = resultFrames.indexOf(lruPage);
+                            replaceIndex = resultFrames.indexOf(evictedPage);
                         } else {
-                            // Fallback to FIFO logic as cheap optimal prediction
                             if (this.fifoQueue.length > 0) {
-                                const oldest = this.fifoQueue.shift();
-                                replaceIndex = resultFrames.indexOf(oldest);
-                                this.fifoQueue.push(page);
+                                evictedPage = this.fifoQueue.shift();
+                                replaceIndex = resultFrames.indexOf(evictedPage);
+                                this.fifoQueue.push(logicalPage);
                             } else {
                                 replaceIndex = 0;
+                                evictedPage = resultFrames[0];
                             }
                         }
-                        this.lruHistory.push(page);
-                    } else { // Fallback to LRU exactly
-                        let lruPage = null;
+                        this.lruHistory.push(logicalPage);
+                    } else if (algorithm === 'Clock') {
+                        // Clock (Second Chance) Algorithm
+                        let found = false;
+                        let loopCount = 0;
+
+                        while (!found && loopCount <= resultFrames.length * 2) {
+                            const framePage = resultFrames[this.clockHand];
+                            let pageTableEntry = null;
+
+                            // Find the process that owns this page
+                            if (currentProcess && currentProcess.pageTable[framePage]) {
+                                pageTableEntry = currentProcess.pageTable[framePage];
+                            } else {
+                                // Search all processes if we changed context
+                                for (let p of this.processes.values()) {
+                                    if (p.pageTable && p.pageTable[framePage] && p.pageTable[framePage].frameId === this.clockHand) {
+                                        pageTableEntry = p.pageTable[framePage];
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!pageTableEntry || !pageTableEntry.reference) {
+                                // Evict this page
+                                replaceIndex = this.clockHand;
+                                evictedPage = framePage;
+                                found = true;
+                            } else {
+                                // Give second chance, clear reference bit
+                                pageTableEntry.reference = false;
+                            }
+
+                            // Advance clock hand
+                            this.clockHand = (this.clockHand + 1) % resultFrames.length;
+                            loopCount++;
+                        }
+
+                        if (!found && resultFrames.length > 0) {
+                            // Failsafe eviction
+                            replaceIndex = 0;
+                            evictedPage = resultFrames[0];
+                        }
+                        this.lruHistory.push(logicalPage);
+                    } else { // Fallback LRU
                         let oldestIndex = Infinity;
                         resultFrames.forEach(framePage => {
                             const lastUsed = this.lruHistory.lastIndexOf(framePage);
                             if (lastUsed < oldestIndex) {
                                 oldestIndex = lastUsed;
-                                lruPage = framePage;
+                                evictedPage = framePage;
                             }
                         });
-                        replaceIndex = resultFrames.indexOf(lruPage);
-                        this.lruHistory.push(page);
+                        replaceIndex = resultFrames.indexOf(evictedPage);
+                        this.lruHistory.push(logicalPage);
                     }
 
-                    // BUG FIX: Actually replace the page in the result frames!
+                    // Execute Replacement
                     if (replaceIndex !== -1 && replaceIndex < resultFrames.length) {
-                        resultFrames[replaceIndex] = page;
+                        resultFrames[replaceIndex] = logicalPage;
+
+                        // OS Actions: Evict old page, load new page
+                        if (currentProcess) {
+                            if (evictedPage !== null && currentProcess.pageTable[evictedPage]) {
+                                currentProcess.pageTable[evictedPage].valid = false;
+                                currentProcess.pageTable[evictedPage].inSwap = true;
+                                currentProcess.pageTable[evictedPage].frameId = -1;
+                                this.logSystemEvent(`Evicted Page ${evictedPage} to Swap`, 'warning');
+
+                                // Flush TLB for evicted page
+                                this.tlb.delete(`${currentProcess.id}_${evictedPage}`);
+                            }
+
+                            if (currentProcess.pageTable[logicalPage]) {
+                                currentProcess.pageTable[logicalPage].frameId = replaceIndex;
+                                currentProcess.pageTable[logicalPage].valid = true;
+                                currentProcess.pageTable[logicalPage].inSwap = false;
+                                this.logSystemEvent(`Loaded Page ${logicalPage} into Frame ${replaceIndex}`, 'info');
+                                this.updateTLB(currentProcess.id, logicalPage, replaceIndex);
+                            }
+                        }
                     }
                 }
             } else {
@@ -280,7 +384,11 @@ class MemoryManager {
                 hitsCount++;
 
                 // Track for LRU
-                this.lruHistory.push(page);
+                this.lruHistory.push(logicalPage);
+
+                if (currentProcess && currentProcess.pageTable[logicalPage]) {
+                    currentProcess.pageTable[logicalPage].reference = true; // Update hardware reference bit
+                }
             }
         });
 
@@ -290,6 +398,12 @@ class MemoryManager {
             this.algorithmStats[algoKey].faults += faultsCount;
             this.algorithmStats[algoKey].hits += hitsCount;
         }
+
+        // Add TLB stats to metrics
+        this.metrics.tlbHits = this.tlbHits;
+        this.metrics.tlbMisses = this.tlbMisses;
+        const totalTlbAccesses = this.tlbHits + this.tlbMisses;
+        this.metrics.tlbHitRatio = totalTlbAccesses > 0 ? ((this.tlbHits / totalTlbAccesses) * 100).toFixed(2) : 0;
 
         return { frames: resultFrames, pageFaults };
     }
@@ -307,9 +421,26 @@ class MemoryManager {
                 processId,
                 frameIndex
             });
+
+            // Update Page Table
+            process.pageTable.forEach(entry => {
+                if (entry.frameId === frameIndex) {
+                    entry.frameId = -1;
+                    entry.valid = false;
+                    entry.inSwap = true;
+                }
+            });
         });
 
+        // Flush TLB for this process
+        for (let key of this.tlb.keys()) {
+            if (key.startsWith(`${processId}_`)) {
+                this.tlb.delete(key);
+            }
+        }
+
         this.processes.delete(processId);
+        this.logSystemEvent(`Process terminated: P${processId}. Memory reclaimed.`, 'success');
         this.updateFragmentation();
         return true;
     }
@@ -369,6 +500,20 @@ class MemoryManager {
         // Calculate throughput (operations per second)
         const throughput = elapsedTime > 0 ? totalAccesses / elapsedTime : 0;
 
+        // Detect Thrashing Condition (Working Set logic)
+        // High page fault rate + High memory utilization
+        const recentFaultRate = this.pageFaults > 0 ? (this.pageFaults / (this.pageFaults + this.pageHits)) : 0;
+        const memoryUtilization = usedFrames / totalFrames;
+        const isThrashing = memoryUtilization > 0.85 && recentFaultRate > 0.4;
+
+        if (isThrashing && !this.wasThrashing) {
+            this.logSystemEvent("CRITICAL: Thrashing detected! Page fault rate too high. CPU spending more time paging than executing.", "error");
+            this.wasThrashing = true;
+        } else if (!isThrashing && this.wasThrashing) {
+            this.logSystemEvent("System recovered from thrashing.", "success");
+            this.wasThrashing = false;
+        }
+
         // Update metrics object
         this.metrics = {
             hits: this.pageHits,
@@ -380,6 +525,7 @@ class MemoryManager {
             internalFragmentation: this.fragmentationStats.internal,
             externalFragmentation: this.fragmentationStats.external,
             throughput: throughput.toFixed(2),
+            isThrashing,
             usedFrames,
             totalFrames
         };
@@ -445,16 +591,29 @@ class MemoryManager {
             return;
         }
 
+        const requiredPages = Math.ceil(size / this.pageSize);
+
+        // Initialize a per-process Page Table (Hardware structure)
+        const processPageTable = new Array(requiredPages).fill(null).map(() => ({
+            frameId: -1,         // -1 indicates not in physical memory (on disk/swap)
+            valid: false,        // Valid/Invalid bit
+            dirty: false,        // Dirty bit (modified)
+            reference: false,    // Reference bit (accessed)
+            inSwap: true         // All pages start in swap/disk conceptually
+        }));
+
         this.processes.set(processId, {
             id: processId,
             size: size,
             duration: duration,
+            totalPages: requiredPages,
+            pageTable: processPageTable,
             frames: new Set(),
             isAllocated: false,
             isCompleted: false
         });
 
-        console.log(`Process ${processId} added with size ${size}`);
+        this.logSystemEvent(`Process created: P${processId} (${size} bytes, ${requiredPages} pages)`, 'process');
     }
 
     allocateFrame(processId, frameId) {
@@ -474,9 +633,50 @@ class MemoryManager {
         process.frames.add(frameId);
         this.frameTable[frameId] = processId;
 
-        console.log('[SUCCESS] Allocated frame', frameId, 'to process', processId);
+        // Find a logical page to back this physical frame
+        // For simulation, just pick the first invalid page
+        const logicalPage = process.pageTable.findIndex(p => !p.valid);
+        if (logicalPage !== -1) {
+            process.pageTable[logicalPage].frameId = frameId;
+            process.pageTable[logicalPage].valid = true;
+            process.pageTable[logicalPage].inSwap = false;
+
+            // Add to TLB simulation
+            this.updateTLB(processId, logicalPage, frameId);
+        }
+
+        this.logSystemEvent(`Allocated Frame ${frameId} to P${processId} (Page ${logicalPage !== -1 ? logicalPage : 'N/A'})`, 'info');
         this.notifyListeners('allocation', { processId, frameId });
         return true;
+    }
+
+    // TLB Simulation Methods
+    updateTLB(processId, pageId, frameId) {
+        const tlbKey = `${processId}_${pageId}`;
+
+        // If TLB is full and we don't have this key, evict one (using FIFO for TLB)
+        if (this.tlb.size >= this.tlbSize && !this.tlb.has(tlbKey)) {
+            const firstKey = this.tlb.keys().next().value;
+            this.tlb.delete(firstKey);
+        }
+
+        this.tlb.set(tlbKey, frameId);
+        this.notifyListeners('tlbUpdate', { tlb: Array.from(this.tlb.entries()) });
+    }
+
+    checkTLB(processId, pageId) {
+        const tlbKey = `${processId}_${pageId}`;
+        this.logSystemEvent(`TLB Lookup: ${tlbKey}`, 'lookup');
+
+        if (this.tlb.has(tlbKey)) {
+            this.tlbHits++;
+            this.logSystemEvent(`TLB HIT: ${tlbKey} -> Frame ${this.tlb.get(tlbKey)}`, 'success');
+            return this.tlb.get(tlbKey);
+        } else {
+            this.tlbMisses++;
+            this.logSystemEvent(`TLB MISS: ${tlbKey}`, 'error');
+            return -1;
+        }
     }
 
     // Set the current executing process
