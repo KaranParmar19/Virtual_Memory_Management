@@ -57,17 +57,16 @@ class MemoryManager {
         });
     }
 
-    getReplacementAlgorithm(algorithm, pages) {
-        console.log(`Running ${algorithm} algorithm with pages:`, pages);
-
-        switch (algorithm) {
-            case 'lru': return this.lruReplacement(pages);
-            case 'fifo': return this.fifoReplacement(pages);
-            case 'optimal': return this.optimalReplacement(pages);
-            case 'hybrid': return this.hybridReplacement(pages);
-            case 'adaptive': return this.adaptiveReplacement(pages);
-            default: return this.fifoReplacement(pages);
-        }
+    getReplacementAlgorithmName(algorithm) {
+        // Just a helper to format the name consistently
+        const formatMap = {
+            'lru': 'LRU',
+            'fifo': 'FIFO',
+            'optimal': 'Optimal',
+            'hybrid': 'Hybrid',
+            'adaptive': 'Adaptive'
+        };
+        return formatMap[algorithm.toLowerCase()] || 'FIFO';
     }
 
     allocateMemory(processId, size) {
@@ -134,17 +133,23 @@ class MemoryManager {
         return null;
     }
 
-    getReplacementAlgorithm(algorithm, pageAccesses) {
+    getReplacementAlgorithm(algorithmId, pageAccesses) {
         let resultFrames = [...this.frameTable];
         let pageFaults = [];
         let faultsCount = 0;
         let hitsCount = 0;
 
+        const algorithm = this.getReplacementAlgorithmName(algorithmId);
+
         // Ensure algorithm state structures exist
         if (!this.fifoQueue) this.fifoQueue = [];
         if (!this.lruHistory) this.lruHistory = [];
+        if (!this.lfuFrequency) this.lfuFrequency = new Map();
 
         pageAccesses.forEach((page, index) => {
+            // Update Frequency for LFU/Hybrid/Adaptive
+            this.lfuFrequency.set(page, (this.lfuFrequency.get(page) || 0) + 1);
+
             if (!resultFrames.includes(page)) {
                 // Page fault
                 pageFaults.push(true);
@@ -199,6 +204,57 @@ class MemoryManager {
                             }
                         }
                         this.lruHistory.push(page);
+                    } else if (algorithm === 'Hybrid') {
+                        // Hybrid LRU-LFU: Score based on both recency and frequency
+                        let bestCandidate = null;
+                        let lowestScore = Infinity;
+
+                        resultFrames.forEach(framePage => {
+                            const recencyRank = this.lruHistory.lastIndexOf(framePage);
+                            const frequencyCount = this.lfuFrequency.get(framePage) || 0;
+
+                            // Higher recencyRank is better, higher frequencyCount is better
+                            // We want to evict the page with the LOWEST combined score
+                            // Invert recency so that older = lower score
+                            const score = frequencyCount + (recencyRank > 0 ? recencyRank * 0.1 : 0);
+
+                            if (score < lowestScore) {
+                                lowestScore = score;
+                                bestCandidate = framePage;
+                            }
+                        });
+
+                        replaceIndex = resultFrames.indexOf(bestCandidate);
+                        this.lruHistory.push(page);
+                    } else if (algorithm === 'Adaptive') {
+                        // Adaptive Learning: dynamically switch between LRU and Optimal based on hit rates
+                        const lruHits = this.algorithmStats['lru'] ? this.algorithmStats['lru'].hits : 0;
+                        const optimalHits = this.algorithmStats['optimal'] ? this.algorithmStats['optimal'].hits : 0;
+
+                        // Choose behavior based on historical performance
+                        if (lruHits > optimalHits) {
+                            // Fallback to LRU logic
+                            let lruPage = null;
+                            let oldestIndex = Infinity;
+                            resultFrames.forEach(framePage => {
+                                const lastUsed = this.lruHistory.lastIndexOf(framePage);
+                                if (lastUsed < oldestIndex) {
+                                    oldestIndex = lastUsed;
+                                    lruPage = framePage;
+                                }
+                            });
+                            replaceIndex = resultFrames.indexOf(lruPage);
+                        } else {
+                            // Fallback to FIFO logic as cheap optimal prediction
+                            if (this.fifoQueue.length > 0) {
+                                const oldest = this.fifoQueue.shift();
+                                replaceIndex = resultFrames.indexOf(oldest);
+                                this.fifoQueue.push(page);
+                            } else {
+                                replaceIndex = 0;
+                            }
+                        }
+                        this.lruHistory.push(page);
                     } else { // Fallback to LRU exactly
                         let lruPage = null;
                         let oldestIndex = Infinity;
@@ -213,6 +269,7 @@ class MemoryManager {
                         this.lruHistory.push(page);
                     }
 
+                    // BUG FIX: Actually replace the page in the result frames!
                     if (replaceIndex !== -1 && replaceIndex < resultFrames.length) {
                         resultFrames[replaceIndex] = page;
                     }
