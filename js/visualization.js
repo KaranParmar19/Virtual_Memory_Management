@@ -20,7 +20,7 @@ class MemoryVisualization {
         this.actionBanner = document.getElementById('actionBanner');
         this.actionBannerText = document.getElementById('actionBannerText');
 
-        this.initCharts();
+        this.setupCharts();
         this.setupResizeListener();
         this.setupEventListeners();
     }
