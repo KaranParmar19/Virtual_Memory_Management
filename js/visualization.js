@@ -112,6 +112,7 @@ class MemoryVisualization {
             block.addEventListener('mousemove', (e) => this.moveTooltip(e));
 
             memoryGrid.appendChild(block);
+            block.dataset.frameId = i;
             this.frameElements.push(block);
         }
     }
@@ -302,83 +303,44 @@ class MemoryVisualization {
     }
 
     animateAllocation(data) {
-        if (!this.animationsEnabled) {
-            this.updateMemoryMap();
-            return;
-        }
+        // Re-render the memory grid to reflect changes
+        const stats = this.memoryManager.getStats();
+        const snapshot = this.memoryManager.getMemorySnapshot();
+        this.renderMemoryBlocks(snapshot, stats);
 
-        const { processId, frameId, animationType } = data;
+        if (!this.animationsEnabled) return;
+
+        // Animate newly allocated block with a pop effect
+        const { processId, frameId } = data;
         const block = document.querySelector(`.memory-block[data-frame-id="${frameId}"]`);
+        if (!block) return;
 
-        if (!block) {
-            this.updateMemoryMap();
-            return;
+        if (typeof gsap !== 'undefined') {
+            gsap.fromTo(block,
+                { scale: 0.5, opacity: 0.5 },
+                { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.7)" }
+            );
         }
-
-        // Get process color based on ID
-        const hue = (processId * 40) % 360;
-
-        // Create animation
-        gsap.fromTo(block,
-            {
-                backgroundColor: '#e5e7eb',
-                scale: 0.5,
-                opacity: 0.5
-            },
-            {
-                backgroundColor: `hsl(${hue}, 70%, 65%)`,
-                scale: 1,
-                opacity: 1,
-                duration: 0.5,
-                ease: "back.out(1.7)",
-                onComplete: () => {
-                    block.dataset.processId = processId;
-                    block.classList.add('allocated');
-
-                    // Add a flash effect
-                    gsap.to(block, {
-                        boxShadow: '0 0 10px rgba(255,255,255,0.8)',
-                        duration: 0.3,
-                        yoyo: true,
-                        repeat: 1
-                    });
-                }
-            }
-        );
     }
 
     animateDeallocation(data) {
-        if (!this.animationsEnabled) {
-            this.updateMemoryMap();
-            return;
-        }
+        // Re-render the memory grid to reflect changes
+        const stats = this.memoryManager.getStats();
+        const snapshot = this.memoryManager.getMemorySnapshot();
+        this.renderMemoryBlocks(snapshot, stats);
 
+        if (!this.animationsEnabled) return;
+
+        // Animate freed block with a fade-to-grey effect
         const { frameId } = data;
         const block = document.querySelector(`.memory-block[data-frame-id="${frameId}"]`);
+        if (!block) return;
 
-        if (!block) {
-            this.updateMemoryMap();
-            return;
+        if (typeof gsap !== 'undefined') {
+            gsap.fromTo(block,
+                { scale: 1.1, opacity: 0.8 },
+                { scale: 1, opacity: 1, duration: 0.4, ease: "power2.inOut" }
+            );
         }
-
-        // Create animation
-        gsap.to(block, {
-            backgroundColor: '#e5e7eb',
-            scale: 0.8,
-            opacity: 0.7,
-            duration: 0.4,
-            ease: "power2.inOut",
-            onComplete: () => {
-                delete block.dataset.processId;
-                block.classList.remove('allocated');
-
-                // Restore to normal
-                gsap.to(block, {
-                    scale: 1,
-                    opacity: 1,
-                    duration: 0.3
-                });
-            }
-        });
     }
 }
