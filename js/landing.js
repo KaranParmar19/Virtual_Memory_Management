@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Navigate after transition completes
         setTimeout(() => {
-            window.location.href = 'index.html';
+            window.location.href = 'landing.html';
         }, 1000);
     }
 
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             pageTransition.classList.add('exit');
             setTimeout(() => {
-                window.location.href = '/index.html';
+                window.location.href = 'landing.html';
             }, 500);
         }, 1500);
     });

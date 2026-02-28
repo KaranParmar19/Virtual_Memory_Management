@@ -1,15 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Virtual Memory Management - Interactive Learning Platform</title>
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/landing.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.0/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.0/ScrollTrigger.min.js"></script>
 </head>
+
 <body class="light-mode">
     <div class="page-transition">
         <div class="transition-content">
@@ -40,7 +48,8 @@
         <div class="hero-content">
             <h1>Virtual Memory Management</h1>
             <p>Interactive visualization and learning platform</p>
-            <a href="index.html" class="cta-button" id="launch-simulator" onclick="handleLaunchClick(event)">Launch Simulator</a>
+            <a href="landing.html" class="cta-button" id="launch-simulator" onclick="handleLaunchClick(event)">Launch
+                Simulator</a>
         </div>
         <div class="hero-animation">
             <canvas id="memoryCanvas"></canvas>
@@ -78,7 +87,8 @@
             <div class="concept-item" data-aos="fade-right">
                 <div class="concept-content">
                     <h3>Virtual Memory</h3>
-                    <p>Virtual memory is a memory management technique that provides an idealized abstraction of the storage resources that are actually available on a given machine.</p>
+                    <p>Virtual memory is a memory management technique that provides an idealized abstraction of the
+                        storage resources that are actually available on a given machine.</p>
                 </div>
                 <div class="concept-visual">
                     <div class="memory-blocks"></div>
@@ -87,7 +97,8 @@
             <div class="concept-item" data-aos="fade-left">
                 <div class="concept-content">
                     <h3>Paging</h3>
-                    <p>Paging is a memory management scheme that eliminates the need for contiguous allocation of physical memory.</p>
+                    <p>Paging is a memory management scheme that eliminates the need for contiguous allocation of
+                        physical memory.</p>
                 </div>
                 <div class="concept-visual">
                     <div class="paging-animation"></div>
@@ -96,7 +107,8 @@
             <div class="concept-item" data-aos="fade-right">
                 <div class="concept-content">
                     <h3>Page Replacement</h3>
-                    <p>When a page fault occurs, the operating system needs to choose which page to remove from memory to make room for the new page.</p>
+                    <p>When a page fault occurs, the operating system needs to choose which page to remove from memory
+                        to make room for the new page.</p>
                 </div>
                 <div class="concept-visual">
                     <div class="replacement-animation"></div>
@@ -117,11 +129,9 @@
                     <li><i class="fas fa-check"></i> Performance analysis</li>
                     <li><i class="fas fa-check"></i> Custom configurations</li>
                 </ul>
-                <a href="index.html" class="cta-button">Try it Now</a>
+                <a href="landing.html" class="cta-button">Try it Now</a>
             </div>
-            <div class="showcase-preview">
-                <img src="images/simulator-preview.png" alt="Simulator Preview">
-            </div>
+            <!-- Removed showcase-preview as the image is missing from the repo -->
         </div>
     </section>
 
@@ -149,4 +159,5 @@
 
     <script src="js/landing.js"></script>
 </body>
+
 </html>
