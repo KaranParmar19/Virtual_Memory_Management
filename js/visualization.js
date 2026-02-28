@@ -25,6 +25,20 @@ class MemoryVisualization {
         this.setupEventListeners();
     }
 
+    setupResizeListener() {
+        window.addEventListener('resize', () => {
+            // Debounce resize events
+            clearTimeout(this.resizeTimeout);
+            this.resizeTimeout = setTimeout(() => {
+                const stats = this.memoryManager.getStats();
+                const snapshot = this.memoryManager.getMemorySnapshot();
+                this.renderMemoryBlocks(snapshot, stats);
+                this.updateFragmentationDisplay({ fragmentation: stats.externalFragmentation });
+                this.updateProcessQueue(Array.from(this.memoryManager.processes.values()));
+            }, 250);
+        });
+    }
+
     setupEventListeners() {
         // Listen for memory events
         this.memoryManager.addListener((eventType, data) => {
