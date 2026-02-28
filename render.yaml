@@ -2,5 +2,9 @@ services:
   - type: web
     name: memory-viz
     env: static
-    buildCommand: ""
-    staticPublishPath: .
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
