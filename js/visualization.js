@@ -6,15 +6,15 @@ class MemoryVisualization {
         this.animationsEnabled = true;
         this.performanceChart = null;
         this.patternsChart = null;
-        
+
         this.setupCharts();
         this.setupEventListeners();
     }
-    
+
     setupEventListeners() {
         // Listen for memory events
         this.memoryManager.addListener((eventType, data) => {
-            switch(eventType) {
+            switch (eventType) {
                 case 'allocation':
                     this.animateAllocation(data);
                     break;
@@ -40,21 +40,21 @@ class MemoryVisualization {
 
         // Create a document fragment for better performance
         const fragment = document.createDocumentFragment();
-        
+
         // Get memory data
         const memory = this.memoryManager.getMemorySnapshot();
-        
+
         // Calculate total frames based on pageSize and totalMemory
         // Convert MB to bytes for calculation
         const totalMemoryBytes = this.memoryManager.totalMemory * 1024 * 1024;
         const pageSizeBytes = this.memoryManager.pageSize * 1024;
         const totalFrames = Math.ceil(totalMemoryBytes / pageSizeBytes);
-        
+
         // Limit frames to a reasonable number for display (max 200)
         const maxFramesToShow = Math.min(totalFrames, 200);
-        
+
         console.log(`Total frames: ${totalFrames}, Showing: ${maxFramesToShow}`);
-        
+
         // Store previous state for animation
         const previousState = {};
         document.querySelectorAll('.memory-block').forEach(block => {
@@ -64,16 +64,16 @@ class MemoryVisualization {
                 color: block.style.backgroundColor
             };
         });
-        
+
         // Clear existing content
         memoryGrid.innerHTML = '';
-        
+
         // Create memory blocks with staggered animation
         for (let i = 0; i < maxFramesToShow; i++) {
             const block = document.createElement('div');
             block.className = 'memory-block';
             block.dataset.frameId = i;
-            
+
             // Check if frame is allocated
             const processId = memory[i];
             if (processId) {
@@ -82,7 +82,7 @@ class MemoryVisualization {
                 block.style.backgroundColor = `hsl(${hue}, 70%, 65%)`;
                 block.dataset.processId = processId;
                 block.classList.add('allocated');
-                
+
                 // Add tooltip with process info
                 const process = this.memoryManager.processes.get(processId);
                 if (process) {
@@ -90,7 +90,7 @@ class MemoryVisualization {
                 } else {
                     block.title = `Process ${processId}\nFrame: ${i}`;
                 }
-                
+
                 // Check if this is a newly allocated block
                 if (!previousState[i] || previousState[i].processId !== processId) {
                     block.classList.add('updated');
@@ -98,23 +98,23 @@ class MemoryVisualization {
             } else {
                 block.style.backgroundColor = '#e5e7eb';
                 block.title = `Empty Frame ${i}`;
-                
+
                 // Check if this was previously allocated
                 if (previousState[i] && previousState[i].processId) {
                     block.classList.add('updated');
                 }
             }
-            
+
             // Set initial scale for animation
             block.style.opacity = '0';
             block.style.transform = 'scale(0.8)';
-            
+
             fragment.appendChild(block);
         }
-        
+
         // Add all blocks to the grid
         memoryGrid.appendChild(fragment);
-        
+
         // Animate blocks appearance with staggered effect
         gsap.to('.memory-block', {
             opacity: 1,
@@ -133,7 +133,7 @@ class MemoryVisualization {
         // Get canvas elements
         const perfCanvas = document.getElementById('performanceChart');
         const patternsCanvas = document.getElementById('patternsChart');
-        
+
         // Clear any existing chart contexts
         if (perfCanvas.chart) {
             perfCanvas.chart.destroy();
@@ -141,7 +141,7 @@ class MemoryVisualization {
         if (patternsCanvas.chart) {
             patternsCanvas.chart.destroy();
         }
-        
+
         // Performance Chart (Hit Ratio over time)
         this.performanceChart = new Chart(perfCanvas, {
             type: 'line',
@@ -172,7 +172,7 @@ class MemoryVisualization {
                 plugins: {
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
                             }
                         }
@@ -194,7 +194,7 @@ class MemoryVisualization {
             }
         });
         perfCanvas.chart = this.performanceChart;
-        
+
         // Memory Patterns Chart
         this.patternsChart = new Chart(patternsCanvas, {
             type: 'bar',
@@ -225,7 +225,7 @@ class MemoryVisualization {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 return `${context.label}: ${context.raw}`;
                             }
                         }
@@ -240,17 +240,17 @@ class MemoryVisualization {
         // Update Performance Chart with animation
         const now = new Date();
         const timeLabel = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-        
+
         this.performanceChart.data.labels.push(timeLabel);
-        this.performanceChart.data.datasets[0].data.push(stats.hitRatio * 100);
+        this.performanceChart.data.datasets[0].data.push(parseFloat(stats.hitRatio));
         this.performanceChart.data.datasets[1].data.push(stats.pageFaults);
-        
+
         // Limit to 20 data points
         if (this.performanceChart.data.labels.length > 20) {
             this.performanceChart.data.labels.shift();
             this.performanceChart.data.datasets.forEach(dataset => dataset.data.shift());
         }
-        
+
         this.performanceChart.update();
 
         // Update Patterns Chart with animation
@@ -260,7 +260,7 @@ class MemoryVisualization {
             stats.pageFaults,
             stats.pageHits
         ];
-        
+
         this.patternsChart.update();
     }
 
@@ -268,7 +268,7 @@ class MemoryVisualization {
         const fragElement = document.getElementById('fragmentationValue');
         if (fragElement) {
             fragElement.textContent = `${(data.fragmentation * 100).toFixed(2)}%`;
-            
+
             // Update fragmentation visualization
             const fragBlocks = document.querySelectorAll('.memory-block.internal-frag');
             fragBlocks.forEach(block => {
@@ -280,15 +280,15 @@ class MemoryVisualization {
     updateProcessQueue(processes) {
         const queueElement = document.getElementById('processQueue');
         if (!queueElement) return;
-        
+
         queueElement.innerHTML = '';
-        
+
         processes.forEach(process => {
             const processElement = document.createElement('div');
             processElement.className = `process-item ${process.isAllocated ? 'bg-blue-100' : 'bg-gray-100'}`;
             processElement.textContent = `P${process.id}`;
-            processElement.title = `Size: ${process.size} bytes\nDuration: ${(process.duration/1000).toFixed(2)}s`;
-            
+            processElement.title = `Size: ${process.size} bytes\nDuration: ${(process.duration / 1000).toFixed(2)}s`;
+
             queueElement.appendChild(processElement);
         });
     }
@@ -300,7 +300,7 @@ class MemoryVisualization {
         if (this.patternsChart) {
             this.patternsChart.destroy();
         }
-        
+
         // Reinitialize charts
         this.setupCharts();
     }
@@ -310,7 +310,7 @@ class MemoryVisualization {
         else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + " KB";
         else return (bytes / 1048576).toFixed(2) + " MB";
     }
-    
+
     capitalizeFirstLetter(string) {
         return string.charAt(0).toUpperCase() + string.slice(1);
     }
@@ -320,26 +320,26 @@ class MemoryVisualization {
             this.updateMemoryMap();
             return;
         }
-        
+
         const { processId, frameId, animationType } = data;
         const block = document.querySelector(`.memory-block[data-frame-id="${frameId}"]`);
-        
+
         if (!block) {
             this.updateMemoryMap();
             return;
         }
-        
+
         // Get process color based on ID
         const hue = (processId * 40) % 360;
-        
+
         // Create animation
-        gsap.fromTo(block, 
-            { 
+        gsap.fromTo(block,
+            {
                 backgroundColor: '#e5e7eb',
                 scale: 0.5,
                 opacity: 0.5
             },
-            { 
+            {
                 backgroundColor: `hsl(${hue}, 70%, 65%)`,
                 scale: 1,
                 opacity: 1,
@@ -348,7 +348,7 @@ class MemoryVisualization {
                 onComplete: () => {
                     block.dataset.processId = processId;
                     block.classList.add('allocated');
-                    
+
                     // Add a flash effect
                     gsap.to(block, {
                         boxShadow: '0 0 10px rgba(255,255,255,0.8)',
@@ -360,21 +360,21 @@ class MemoryVisualization {
             }
         );
     }
-    
+
     animateDeallocation(data) {
         if (!this.animationsEnabled) {
             this.updateMemoryMap();
             return;
         }
-        
+
         const { frameId } = data;
         const block = document.querySelector(`.memory-block[data-frame-id="${frameId}"]`);
-        
+
         if (!block) {
             this.updateMemoryMap();
             return;
         }
-        
+
         // Create animation
         gsap.to(block, {
             backgroundColor: '#e5e7eb',
@@ -385,7 +385,7 @@ class MemoryVisualization {
             onComplete: () => {
                 delete block.dataset.processId;
                 block.classList.remove('allocated');
-                
+
                 // Restore to normal
                 gsap.to(block, {
                     scale: 1,

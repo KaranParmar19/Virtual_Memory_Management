@@ -299,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check if memory utilization threshold has been reached
             const metrics = memoryManager.getStats();
+            memoryManager.notifyListeners('stats', metrics);
             const memoryUsage = (metrics.usedFrames / metrics.totalFrames) * 100;
 
             if (memoryUsage >= memoryThreshold) {

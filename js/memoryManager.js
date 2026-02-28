@@ -31,6 +31,7 @@ class MemoryManager {
         };
         this.lastUsed = new Map();
         this.currentExecutingProcess = null; // Track current executing process
+        this.fragmentationStats = { internal: 0, external: 0 };
     }
 
     addListener(callback) {
@@ -282,6 +283,11 @@ class MemoryManager {
             }
         });
 
+        this.fragmentationStats = {
+            internal: internalFragmentation,
+            external: externalFragmentation
+        };
+
         // Notify listeners about fragmentation update
         this.notifyListeners('fragmentation', {
             internal: internalFragmentation,
@@ -310,8 +316,12 @@ class MemoryManager {
         this.metrics = {
             hits: this.pageHits,
             misses: this.pageFaults,
+            pageHits: this.pageHits,
+            pageFaults: this.pageFaults,
             hitRatio: hitRatio.toFixed(2),
             fragmentation: fragmentationPercent.toFixed(2),
+            internalFragmentation: this.fragmentationStats.internal,
+            externalFragmentation: this.fragmentationStats.external,
             throughput: throughput.toFixed(2),
             usedFrames,
             totalFrames
