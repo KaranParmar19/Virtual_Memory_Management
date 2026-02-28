@@ -133,25 +133,90 @@
                         </button>
                     </div>
                 </div>
-                <div class="memory-blocks">
-                    <div class="memory-grid" id="memoryGrid"></div>
+
+                <!-- Educational Action Banner -->
+                <div class="action-banner-container" id="actionBannerContainer">
+                    <div class="action-banner" id="actionBanner">
+                        <i class="fas fa-info-circle"></i>
+                        <span id="actionBannerText">Waiting for stimulation to begin...</span>
+                    </div>
+                </div>
+
+                <!-- Tooltip for Memory Blocks -->
+                <div id="memoryTooltip" class="memory-tooltip custom-hidden">
+                    <div class="tooltip-header" id="ttHeader">Frame 0</div>
+                    <div class="tooltip-body">
+                        <div class="tt-row"><span class="tt-label">Status:</span> <span id="ttStatus"
+                                class="tt-value">Free</span></div>
+                        <div class="tt-row"><span class="tt-label">Process:</span> <span id="ttProcess"
+                                class="tt-value">-</span></div>
+                        <div class="tt-row"><span class="tt-label">Logical Page:</span> <span id="ttPage"
+                                class="tt-value">-</span></div>
+                        <div class="tt-row"><span class="tt-label">Hardware Bits:</span> <span id="ttBits"
+                                class="tt-value">-</span></div>
+                        <div class="tt-row"><span class="tt-label">Action:</span> <span id="ttAction"
+                                class="tt-value">-</span></div>
+                    </div>
+                </div>
+
+                <div id="memoryMap" class="memory-grid">
+                    <!-- Memory blocks will be generated here -->
                 </div>
 
                 <div class="fragmentation-container">
-                    <h3><i class="fas fa-puzzle-piece"></i> Memory Fragmentation</h3>
-                    <div class="fragmentation-legend">
-                        <div class="legend-item">
-                            <span class="legend-color internal"></span>
-                            <span>Internal Fragmentation</span>
+                    <h3><i class="fas fa-puzzle-piece"></i> Memory Visualization Key</h3>
+                    <p class="legend-description">Hover over any frame above to see OS hardware state details.</p>
+
+                    <div class="fragmentation-legend detailed-legend">
+                        <div class="legend-column">
+                            <h4>Frame Status</h4>
+                            <div class="legend-item">
+                                <div class="legend-color free"></div>
+                                <span title="Available empty physical memory frame">Free Frame</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color used"></div>
+                                <span title="Frame currently holding a page for a process">Allocated Frame</span>
+                            </div>
                         </div>
-                        <div class="legend-item">
-                            <span class="legend-color external"></span>
-                            <span>External Fragmentation</span>
+
+                        <div class="legend-column">
+                            <h4>OS Actions (Flashing Animations)</h4>
+                            <div class="legend-item">
+                                <div class="legend-color hit-anim"></div>
+                                <span title="Page was found in memory (cheap)">Page Hit (Green Flash)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color fault-anim"></div>
+                                <span title="Page was missing, had to load from disk (expensive)">Page Fault (Red
+                                    Flash)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color swap-anim"></div>
+                                <span title="Page was written back to disk">Evicted to Swap (Blue/Fade)</span>
+                            </div>
+                        </div>
+
+                        <div class="legend-column">
+                            <h4>Fragmentation</h4>
+                            <div class="legend-item">
+                                <div class="legend-color internal"></div>
+                                <span
+                                    title="Wasted space inside an allocated frame because the process didn't need the whole frame size.">Internal
+                                    Fragmentation</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color external"></div>
+                                <span
+                                    title="Free space scattered between allocated frames, usually causing allocation issues.">External
+                                    Fragmentation</span>
+                            </div>
                         </div>
                     </div>
-                    <div id="fragmentation-view"></div>
-                    <div id="fragmentation-chart"></div>
                 </div>
+
+                <div id="fragmentation-view"></div>
+                <div id="fragmentation-chart"></div>
 
                 <div id="animation-container">
 

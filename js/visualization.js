@@ -7,7 +7,21 @@ class MemoryVisualization {
         this.performanceChart = null;
         this.patternsChart = null;
 
-        this.setupCharts();
+        // Tooltip Elements
+        this.tooltip = document.getElementById('memoryTooltip');
+        this.ttHeader = document.getElementById('ttHeader');
+        this.ttStatus = document.getElementById('ttStatus');
+        this.ttProcess = document.getElementById('ttProcess');
+        this.ttPage = document.getElementById('ttPage');
+        this.ttBits = document.getElementById('ttBits');
+        this.ttAction = document.getElementById('ttAction');
+
+        // Action Banner
+        this.actionBanner = document.getElementById('actionBanner');
+        this.actionBannerText = document.getElementById('actionBannerText');
+
+        this.initCharts();
+        this.setupResizeListener();
         this.setupEventListeners();
     }
 
@@ -30,105 +44,63 @@ class MemoryVisualization {
                 case 'processQueue':
                     this.updateProcessQueue(data.processes);
                     break;
+                case 'pageHit':
+                    this.animateFrameAction(data.frameIndex, 'hit');
+                    this.showActionBanner(`Page Hit! Process ${data.processId}, Page ${data.logicalPage} found in Frame ${data.frameIndex}.`, 'hit');
+                    break;
+                case 'pageFault':
+                    this.animateFrameAction(data.frameIndex, 'fault');
+                    this.showActionBanner(`Page Fault! Process ${data.processId}, Page ${data.logicalPage} not in memory.`, 'fault');
+                    break;
+                case 'pageEvict':
+                    this.animateFrameAction(data.frameIndex, 'evict');
+                    this.showActionBanner(`Page Evicted! Frame ${data.frameIndex} was replaced.`, 'swap');
+                    break;
             }
         });
     }
 
-    updateMemoryMap() {
+    renderMemoryBlocks(frames, stats) {
         const memoryGrid = document.getElementById('memoryGrid');
         if (!memoryGrid) return;
-
-        // Create a document fragment for better performance
-        const fragment = document.createDocumentFragment();
-
-        // Get memory data
-        const memory = this.memoryManager.getMemorySnapshot();
-
-        // Calculate total frames based on pageSize and totalMemory
-        // Convert MB to bytes for calculation
-        const totalMemoryBytes = this.memoryManager.totalMemory * 1024 * 1024;
-        const pageSizeBytes = this.memoryManager.pageSize * 1024;
-        const totalFrames = Math.ceil(totalMemoryBytes / pageSizeBytes);
-
-        // Limit frames to a reasonable number for display (max 200)
-        const maxFramesToShow = Math.min(totalFrames, 200);
-
-        console.log(`Total frames: ${totalFrames}, Showing: ${maxFramesToShow}`);
-
-        // Store previous state for animation
-        const previousState = {};
-        document.querySelectorAll('.memory-block').forEach(block => {
-            const frameId = block.dataset.frameId;
-            previousState[frameId] = {
-                processId: block.dataset.processId,
-                color: block.style.backgroundColor
-            };
-        });
 
         // Clear existing content
         memoryGrid.innerHTML = '';
 
-        // Create memory blocks with staggered animation
-        for (let i = 0; i < maxFramesToShow; i++) {
+        // Extract metadata if available (added for Expert OS features)
+        const frameMetadata = stats && stats.frameMetadata ? stats.frameMetadata : [];
+
+        // Track frame references for tooltips
+        this.frameElements = [];
+
+        for (let i = 0; i < stats.totalFrames; i++) {
             const block = document.createElement('div');
             block.className = 'memory-block';
-            block.dataset.frameId = i;
 
-            // Check if frame is allocated
-            const processId = memory[i];
-            if (processId) {
-                // Get process color based on ID
-                const hue = (processId * 40) % 360;
-                block.style.backgroundColor = `hsl(${hue}, 70%, 65%)`;
-                block.dataset.processId = processId;
-                block.classList.add('allocated');
+            // Get detailed OS metadata for this frame
+            const metadata = frameMetadata[i] || { status: 'Free' };
 
-                // Add tooltip with process info
-                const process = this.memoryManager.processes.get(processId);
-                if (process) {
-                    block.title = `Process ${processId}\nSize: ${this.formatBytes(process.size)}\nFrame: ${i}`;
-                } else {
-                    block.title = `Process ${processId}\nFrame: ${i}`;
-                }
+            if (frames[i] !== null) {
+                block.classList.add('used');
+                const processColor = this.getProcessColor(frames[i]);
+                block.style.backgroundColor = processColor;
 
-                // Check if this is a newly allocated block
-                if (!previousState[i] || previousState[i].processId !== processId) {
-                    block.classList.add('updated');
-                }
+                // Keep track of the owner for linking
+                block.dataset.processId = frames[i];
             } else {
-                block.style.backgroundColor = '#e5e7eb';
-                block.title = `Empty Frame ${i}`;
-
-                // Check if this was previously allocated
-                if (previousState[i] && previousState[i].processId) {
-                    block.classList.add('updated');
-                }
+                block.classList.add('free');
+                block.dataset.processId = 'none';
             }
 
-            // Set initial scale for animation
-            block.style.opacity = '0';
-            block.style.transform = 'scale(0.8)';
+            // Bind tooltip events
+            block.addEventListener('mouseover', (e) => this.showTooltip(e, i, metadata));
+            block.addEventListener('mouseout', () => this.hideTooltip());
+            block.addEventListener('mousemove', (e) => this.moveTooltip(e));
 
-            fragment.appendChild(block);
+            memoryGrid.appendChild(block);
+            this.frameElements.push(block);
         }
-
-        // Add all blocks to the grid
-        memoryGrid.appendChild(fragment);
-
-        // Animate blocks appearance with staggered effect
-        gsap.to('.memory-block', {
-            opacity: 1,
-            scale: 1,
-            duration: 0.4,
-            stagger: {
-                amount: 0.8,
-                grid: "auto",
-                from: "center"
-            },
-            ease: "back.out(1.2)"
-        });
     }
-
     setupCharts() {
         // Get canvas elements
         const perfCanvas = document.getElementById('performanceChart');

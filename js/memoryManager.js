@@ -493,9 +493,34 @@ class MemoryManager {
         const hitRatio = totalAccesses > 0 ? (this.pageHits / totalAccesses) * 100 : 0;
 
         // Calculate fragmentation
+        const emptyFrames = this.frameTable.filter(f => f === null).length;
+        const usedFrames = this.frameTable.length - emptyFrames;
         const totalFrames = this.frameTable.length;
-        const usedFrames = this.frameTable.filter(frame => frame !== null).length;
-        const fragmentationPercent = this.calculateFragmentation();
+
+        // --- Educational Upgrade: Export OS Detailed Frame Metadata ---
+        const frameMetadata = this.frameTable.map((processId, index) => {
+            if (processId === null) return { status: 'Free' };
+
+            let metadata = { status: 'Allocated', processId };
+            const process = this.processes.get(processId);
+
+            if (process && process.pageTable) {
+                // Find logical page that maps to this physical frame
+                const logicalPage = process.pageTable.findIndex(entry => entry.frameId === index);
+                if (logicalPage !== -1) {
+                    const ptEntry = process.pageTable[logicalPage];
+                    metadata.logicalPage = logicalPage;
+                    metadata.valid = ptEntry.valid;
+                    metadata.dirty = ptEntry.dirty;
+                    metadata.reference = ptEntry.reference;
+                }
+            }
+            return metadata;
+        });
+
+        // Calculate fragmentation
+        let internalFrag = this.fragmentationStats.internal; // Use pre-calculated internal fragmentation
+        const fragmentationPercent = this.calculateFragmentation(); // This calculates external fragmentation percentage
 
         // Calculate throughput (operations per second)
         const throughput = elapsedTime > 0 ? totalAccesses / elapsedTime : 0;
@@ -527,7 +552,8 @@ class MemoryManager {
             throughput: throughput.toFixed(2),
             isThrashing,
             usedFrames,
-            totalFrames
+            totalFrames,
+            frameMetadata // Added detailed OS hardware metadata
         };
 
         return this.metrics;
